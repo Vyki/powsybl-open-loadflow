@@ -63,15 +63,19 @@ public abstract class AbstractNetworkResult {
         this.dcPowerFactor = dcPowerFactor;
     }
 
-    protected void addResults(StateMonitor monitor, Consumer<LfBranch> branchConsumer, Predicate<LfBranch> isBranchDisabled, Map<String, LfBranch.LfBranchResults> zeroImpedanceFlows) {
+    void addResults(StateMonitor monitor, Consumer<LfBranch> branchConsumer, Predicate<LfBranch> isBranchDisabled,
+                    Map<String, LfBranch.LfBranchResults> zeroImpedanceFlows, ResultFilter resultFilter) {
         Objects.requireNonNull(monitor);
+        Objects.requireNonNull(resultFilter);
         if (!monitor.getBranchIds().isEmpty()) {
             network.getBranches().stream()
                     .filter(lfBranch -> !isBranchDisabled.test(lfBranch))
                     .forEach(lfBranch -> {
                         for (String originalId : lfBranch.getOriginalIds()) {
                             if (monitor.getBranchIds().contains(originalId)) {
-                                branchConsumer.accept(lfBranch);
+                                if (resultFilter.branch().test(lfBranch)) {
+                                    branchConsumer.accept(lfBranch);
+                                }
                                 break; // only generate result at first original ID match
                             }
                         }
@@ -81,12 +85,14 @@ public abstract class AbstractNetworkResult {
         if (!monitor.getVoltageLevelIds().isEmpty()) {
             network.getBuses().stream()
                     .filter(lfBus -> monitor.getVoltageLevelIds().contains(lfBus.getVoltageLevelId()))
+                    .filter(lfBus -> resultFilter.voltageLevel().test(lfBus.getVoltageLevelId()))
                     .filter(lfBus -> !lfBus.isDisabled())
                     .forEach(lfBus -> busResults.addAll(lfBus.createBusResults()));
         }
 
         if (!monitor.getThreeWindingsTransformerIds().isEmpty()) {
             monitor.getThreeWindingsTransformerIds().stream()
+                    .filter(resultFilter.threeWindingsTransformer())
                     .filter(id -> network.getBusById(LfStarBus.getId(id)) != null && !network.getBusById(LfStarBus.getId(id)).isDisabled())
                     .forEach(id -> threeWindingsTransformerResults.add(LfLegBranch.createThreeWindingsTransformerResult(network, id, createResultExtension, zeroImpedanceFlows, loadFlowModel)));
         }

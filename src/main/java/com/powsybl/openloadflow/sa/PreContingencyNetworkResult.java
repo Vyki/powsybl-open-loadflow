@@ -34,10 +34,8 @@ public class PreContingencyNetworkResult extends AbstractNetworkResult {
     }
 
     private void addResults(StateMonitor monitor, Predicate<LfBranch> isBranchDisabled, Map<String, LfBranch.LfBranchResults> zeroImpedanceFlows) {
-        addResults(monitor, branch -> {
-            branch.createBranchResult(Double.NaN, Double.NaN, createResultExtension, zeroImpedanceFlows, loadFlowModel)
-                    .forEach(branchResult -> branchResults.put(branchResult.getBranchId(), branchResult));
-        }, isBranchDisabled, zeroImpedanceFlows);
+        addResults(monitor, branch -> branch.createBranchResult(Double.NaN, Double.NaN, createResultExtension, zeroImpedanceFlows, loadFlowModel)
+                .forEach(branchResult -> branchResults.put(branchResult.getBranchId(), branchResult)), isBranchDisabled, zeroImpedanceFlows, ResultFilter.ALL);
     }
 
     @Override

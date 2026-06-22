@@ -203,14 +203,16 @@ public class WoodburyDcSecurityAnalysis extends DcSecurityAnalysis {
 
         lfContingency.apply(loadFlowContext.getParameters().getBalanceType());
 
-        // update post contingency network result
-        var postContingencyNetworkResult = new PostContingencyNetworkResult(lfNetwork, new AbstractNetworkResult.StateMonitorIndexes(monitorIndex, zeroImpedanceMonitoredIndex), woodburyContext.createResultExtension,
-                preContingencyNetworkResult, contingency, LoadFlowModel.DC, woodburyContext.dcLoadFlowContext().getParameters().getEquationSystemCreationParameters().getDcPowerFactor());
-        postContingencyNetworkResult.update(isBranchDisabledDueToContingency);
-
         // detect violations
         var postContingencyLimitViolationManager = new LimitViolationManager(preContingencyLimitViolationManager, woodburyContext.limitReductions, woodburyContext.violationsParameters);
         postContingencyLimitViolationManager.detectViolations(lfNetwork, isBranchDisabledDueToContingency);
+        ViolationIds postContingencyViolationIds = getViolationIds(postContingencyLimitViolationManager.getLimitViolations());
+
+        // update post contingency network result
+        var postContingencyNetworkResult = new PostContingencyNetworkResult(lfNetwork, new AbstractNetworkResult.StateMonitorIndexes(monitorIndex, zeroImpedanceMonitoredIndex), woodburyContext.createResultExtension,
+                preContingencyNetworkResult, contingency, LoadFlowModel.DC, loadFlowContext.getParameters().getEquationSystemCreationParameters().getDcPowerFactor());
+        postContingencyNetworkResult.update(isBranchDisabledDueToContingency,
+                createResultFilter(getPostContingencyStateMonitor(contingency.getId()), postContingencyViolationIds));
 
         // connectivity result due to the contingency
         var connectivityResult = new ConnectivityResult(
@@ -249,15 +251,17 @@ public class WoodburyDcSecurityAnalysis extends DcSecurityAnalysis {
         lfContingency.apply(loadFlowContext.getParameters().getBalanceType());
         LfActionUtils.applyListOfActions(operatorStrategyLfActions, lfNetwork, lfContingency, loadFlowContext.getParameters().getNetworkParameters());
 
-        // update network result
-        var postActionsNetworkResult = new PostContingencyNetworkResult(lfNetwork, new AbstractNetworkResult.StateMonitorIndexes(monitorIndex, zeroImpedanceMonitoredIndex), woodburyContext.createResultExtension,
-                preContingencyNetworkResult, contingency, LoadFlowModel.DC, loadFlowContext.getParameters().getEquationSystemCreationParameters().getDcPowerFactor());
-        postActionsNetworkResult.update(isBranchDisabledDueToContingency);
-
         // detect violations
         var postActionsViolationManager = new LimitViolationManager(preContingencyLimitViolationManager,
                 woodburyContext.limitReductions, woodburyContext.violationsParameters);
         postActionsViolationManager.detectViolations(lfNetwork, isBranchDisabledDueToContingency);
+
+        // update network result
+        var postActionsNetworkResult = new PostContingencyNetworkResult(lfNetwork, new AbstractNetworkResult.StateMonitorIndexes(monitorIndex, zeroImpedanceMonitoredIndex), woodburyContext.createResultExtension,
+                preContingencyNetworkResult, contingency, LoadFlowModel.DC, loadFlowContext.getParameters().getEquationSystemCreationParameters().getDcPowerFactor());
+        postActionsNetworkResult.update(isBranchDisabledDueToContingency,
+                createResultFilter(getPostContingencyStateMonitor(lfContingency.getId()),
+                        getViolationIds(postActionsViolationManager.getLimitViolations())));
 
         return new OperatorStrategyResult(operatorStrategy,
             List.of(

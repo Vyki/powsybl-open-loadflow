@@ -41,13 +41,14 @@ public class PostContingencyNetworkResult extends AbstractNetworkResult {
         branchResults.clear();
     }
 
-    public void addResults(StateMonitor monitor, Predicate<LfBranch> isBranchDisabled, Map<String, LfBranch.LfBranchResults> zeroImpedanceFlows) {
+    private void addResults(StateMonitor monitor, Predicate<LfBranch> isBranchDisabled, Map<String, LfBranch.LfBranchResults> zeroImpedanceFlows,
+                            ResultFilter resultFilter) {
         addResults(monitor, branch -> {
             var preContingencyBranchResult = preContingencyMonitorInfos.getBranchResult(branch.getId());
             double preContingencyBranchP1 = preContingencyBranchResult != null ? preContingencyBranchResult.getP1() : Double.NaN;
             double preContingencyBranchOfContingencyP1 = Double.NaN;
             if (contingency.getElements().size() == 1) {
-                ContingencyElement contingencyElement = contingency.getElements().get(0);
+                ContingencyElement contingencyElement = contingency.getElements().getFirst();
                 if (contingencyElement.getType() == ContingencyElementType.BRANCH
                         || contingencyElement.getType() == ContingencyElementType.LINE
                         || contingencyElement.getType() == ContingencyElementType.BOUNDARY_LINE
@@ -59,7 +60,7 @@ public class PostContingencyNetworkResult extends AbstractNetworkResult {
                 }
             }
             branchResults.addAll(branch.createBranchResult(preContingencyBranchP1, preContingencyBranchOfContingencyP1, createResultExtension, zeroImpedanceFlows, loadFlowModel));
-        }, isBranchDisabled, zeroImpedanceFlows);
+        }, isBranchDisabled, zeroImpedanceFlows, resultFilter);
     }
 
     @Override
@@ -68,14 +69,18 @@ public class PostContingencyNetworkResult extends AbstractNetworkResult {
     }
 
     public void update(Predicate<LfBranch> isBranchDisabled) {
+        update(isBranchDisabled, ResultFilter.ALL);
+    }
+
+    void update(Predicate<LfBranch> isBranchDisabled, ResultFilter resultFilter) {
         clear();
         StateMonitor stateMonitor = monitorIndex.getSpecificStateMonitors().get(contingency.getId());
         if (stateMonitor != null) {
             Map<String, LfBranch.LfBranchResults> zeroImpedanceFlows = storeResultsForZeroImpedanceBranches(zeroImpedanceMonitorIndex.getSpecificStateMonitors().get(contingency.getId()), network);
-            addResults(stateMonitor, isBranchDisabled, zeroImpedanceFlows);
+            addResults(stateMonitor, isBranchDisabled, zeroImpedanceFlows, resultFilter);
         } else {
             Map<String, LfBranch.LfBranchResults> zeroImpedanceFlows = storeResultsForZeroImpedanceBranches(zeroImpedanceMonitorIndex.getAllStateMonitor(), network);
-            addResults(monitorIndex.getAllStateMonitor(), isBranchDisabled, zeroImpedanceFlows);
+            addResults(monitorIndex.getAllStateMonitor(), isBranchDisabled, zeroImpedanceFlows, resultFilter);
         }
     }
 

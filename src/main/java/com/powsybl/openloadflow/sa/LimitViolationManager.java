@@ -270,7 +270,11 @@ public class LimitViolationManager {
         return false;
     }
 
-    private static boolean isFlowViolation(LimitViolation limit) {
+    public static boolean isFlowViolation(LimitViolation limit) {
         return limit.getLimitType() == LimitViolationType.CURRENT || limit.getLimitType() == LimitViolationType.ACTIVE_POWER || limit.getLimitType() == LimitViolationType.APPARENT_POWER;
+    }
+
+    public static boolean isVoltageViolation(LimitViolation limit) {
+        return limit.getLimitType() == LimitViolationType.HIGH_VOLTAGE || limit.getLimitType() == LimitViolationType.LOW_VOLTAGE;
     }
 }

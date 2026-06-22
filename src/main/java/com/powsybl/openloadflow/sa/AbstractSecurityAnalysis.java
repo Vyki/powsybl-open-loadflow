@@ -50,6 +50,7 @@ import com.powsybl.security.*;
 import com.powsybl.security.limitreduction.LimitReduction;
 import com.powsybl.security.monitor.StateMonitor;
 import com.powsybl.security.monitor.StateMonitorIndex;
+import com.powsybl.security.monitor.StateMonitorResultMode;
 import com.powsybl.security.results.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -100,6 +101,35 @@ public abstract class AbstractSecurityAnalysis<V extends Enum<V> & Quantity, E e
 
     protected static SecurityAnalysisResult createNoResult() {
         return new SecurityAnalysisResult(new LimitViolationsResult(Collections.emptyList()), LoadFlowResult.ComponentResult.Status.FAILED, Collections.emptyList());
+    }
+
+    protected record ViolationIds(Set<String> flow, Set<String> voltage) {
+    }
+
+    protected static ViolationIds getViolationIds(Collection<LimitViolation> limitViolations) {
+        Set<String> flowViolationIds = new HashSet<>();
+        Set<String> voltageViolationIds = new HashSet<>();
+        limitViolations.forEach(violation -> {
+            if (LimitViolationManager.isFlowViolation(violation)) {
+                flowViolationIds.add(violation.getSubjectId());
+            } else if (LimitViolationManager.isVoltageViolation(violation)) {
+                voltageViolationIds.add(violation.getSubjectId());
+            }
+        });
+        return new ViolationIds(flowViolationIds, voltageViolationIds);
+    }
+
+    ResultFilter createResultFilter(StateMonitor monitor, ViolationIds violationIds) {
+        return new ResultFilter(
+                branch -> branch.getOriginalIds().stream()
+                        .filter(monitor.getBranchIds()::contains)
+                        .anyMatch(id -> monitorIndex.getBranchResultMode(monitor, id) == StateMonitorResultMode.ALL || violationIds.flow().contains(id)),
+                id -> monitorIndex.getVoltageLevelResultMode(monitor, id) == StateMonitorResultMode.ALL || violationIds.voltage().contains(id),
+                id -> monitorIndex.getThreeWindingsTransformerResultMode(monitor, id) == StateMonitorResultMode.ALL || violationIds.flow().contains(id));
+    }
+
+    protected StateMonitor getPostContingencyStateMonitor(String contingencyId) {
+        return monitorIndex.getSpecificStateMonitors().getOrDefault(contingencyId, monitorIndex.getAllStateMonitor());
     }
 
     public CompletableFuture<SecurityAnalysisReport> run(String workingVariantId, SecurityAnalysisParameters securityAnalysisParameters,
@@ -449,7 +479,7 @@ public abstract class AbstractSecurityAnalysis<V extends Enum<V> & Quantity, E e
         ContingencyContext contingencyContext = stateMonitor.getContingencyContext();
         Set<String> branchIds = stateMonitor.getBranchIds().stream().filter(id -> checkZeroImpedanceLine(lfNetwork, id)).collect(Collectors.toSet());
         Set<String> threeWindingTransformerIds = stateMonitor.getThreeWindingsTransformerIds().stream().filter(id -> checkZeroImpedanceT3WT(lfNetwork, id)).collect(Collectors.toSet());
-        return new StateMonitor(contingencyContext, branchIds, new HashSet<>(), threeWindingTransformerIds);
+        return new StateMonitor(contingencyContext, branchIds, new HashSet<>(), threeWindingTransformerIds, stateMonitor.getResultMode());
     }
 
     protected List<StateMonitor> extractZeroImpedanceStateMonitors(LfNetwork lfNetwork) {
@@ -684,11 +714,13 @@ public abstract class AbstractSecurityAnalysis<V extends Enum<V> & Quantity, E e
         var postContingencyNetworkResult = new PostContingencyNetworkResult(network, new AbstractNetworkResult.StateMonitorIndexes(monitorIndex, zeroImpedanceMonitoredIndex), createResultExtension, preContingencyNetworkResult, contingency, loadFlowModel, securityAnalysisParameters.getLoadFlowParameters().getDcPowerFactor());
 
         if (status.equals(PostContingencyComputationStatus.CONVERGED)) {
-            // update network result
-            postContingencyNetworkResult.update();
-
             // detect violations
             postContingencyLimitViolationManager.detectViolations(network);
+
+            // update network result
+            postContingencyNetworkResult.update(LfBranch::isDisabled,
+                    createResultFilter(getPostContingencyStateMonitor(contingency.getId()),
+                            getViolationIds(postContingencyLimitViolationManager.getLimitViolations())));
         }
 
         stopwatch.stop();
@@ -757,6 +789,11 @@ public abstract class AbstractSecurityAnalysis<V extends Enum<V> & Quantity, E e
 
             // detect violations
             postActionsViolationManager.detectViolations(network);
+
+            // update network result
+            postActionsNetworkResult.update(LfBranch::isDisabled,
+                    createResultFilter(getPostContingencyStateMonitor(contingency.getId()),
+                            getViolationIds(postActionsViolationManager.getLimitViolations())));
         }
 
         stopwatch.stop();
